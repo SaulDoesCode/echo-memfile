@@ -26,8 +26,8 @@
 
 ### echo-memfile will serve index.html files in directories
 
-http:/localhost:1323/ -> ./assets/index.html   
-http:/localhost:1323/blog -> ./assets/blog/index.html   
+http://localhost:1323/ -> ./assets/index.html   
+http://localhost:1323/blog -> ./assets/blog/index.html   
 
 
 ### updating files
@@ -50,3 +50,5 @@ http:/localhost:1323/blog -> ./assets/blog/index.html
     ticker.Stop()
   }
 ```
+
+##### public domain, do whatever man

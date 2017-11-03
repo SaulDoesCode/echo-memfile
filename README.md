@@ -70,7 +70,7 @@ http://localhost:1323/blog -> ./assets/blog/index.html
   server.GET("/resource/", func(c echo.Context) error {
 
     if file, ok := memfile.Cached["/resource.json"]; ok {
-      memfile.ServeEcho(c, file)
+      return memfile.ServeEcho(c, file)
     }
 
     return c.JSON(404, map[string]string{

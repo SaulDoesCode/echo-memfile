@@ -248,7 +248,7 @@ func ServeMemFile(filename string) func(c ctx) error {
 	}
 }
 
-func Serve(res http.ResponseWriter, req *http.Request, memfile MemFile) {
+func Serve(res http.ResponseWriter, req *http.Request, memfile MemFile) error {
 	res.Header().Set("Etag", memfile.ETag)
 	//c.Response().Header().Set("Cache-Control", "public, max-age=3600, must-revalidate")
 	if DevMode {
@@ -262,14 +262,14 @@ func Serve(res http.ResponseWriter, req *http.Request, memfile MemFile) {
 	if match := req.Header.Get("If-None-Match"); match != "" {
 		if strings.Contains(match, memfile.ETag) {
 			res.WriteHeader(304)
-			return
+			return nil
 		}
 	}
 
 	if match := req.Header.Get("If-Match"); match != "" {
 		if strings.Contains(match, memfile.ETag) {
 			res.WriteHeader(304)
-			return
+			return nil
 		}
 	}
 
@@ -281,6 +281,8 @@ func Serve(res http.ResponseWriter, req *http.Request, memfile MemFile) {
 		res.WriteHeader(200)
 		res.Write(memfile.DefaultContent)
 	}
+
+	return nil
 }
 
 func ServeEcho(c ctx, memfile MemFile) error {

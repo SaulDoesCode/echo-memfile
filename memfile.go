@@ -33,7 +33,7 @@ type MemFile struct {
 var (
 	ServerDir        string
 	DevMode          bool
-	MemCached        = map[string]MemFile{}
+	Cached        = map[string]MemFile{}
 	memfilesFirstRun = true
 	Platform         = runtime.GOOS
 	slash            = "/"
@@ -89,7 +89,7 @@ func Update() {
 			filelist = append(filelist, servePath)
 
 			if !memfilesFirstRun {
-				_, hasFile := MemCached[servePath]
+				_, hasFile := Cached[servePath]
 				if !hasFile && DevMode {
 					fmt.Println("New File: ", servePath)
 				}
@@ -97,14 +97,14 @@ func Update() {
 				fmt.Println("New file: ", servePath)
 			}
 
-			if mferr := cacheFile(location, servePath); mferr != nil && DevMode {
+			if mferr := CacheFile(location, servePath); mferr != nil && DevMode {
 				panic(mferr)
 			}
 		}
 		return err
 	})
 
-	for mfPath, _ := range MemCached {
+	for mfPath, _ := range Cached {
 		shouldDelete := true
 		for _, servePath := range filelist {
 			if servePath == mfPath {
@@ -112,7 +112,7 @@ func Update() {
 			}
 		}
 		if shouldDelete {
-			delete(MemCached, mfPath)
+			delete(Cached, mfPath)
 			if DevMode {
 				fmt.Println("No longer serving: ", mfPath)
 			}
@@ -156,8 +156,8 @@ func Init(server *echo.Echo, dir string, devmode bool) {
 				}
 			}
 
-			if memfile, ok := MemCached[path]; ok {
-				ServeMemfile(c.Response().Writer, c.Request(), memfile)
+			if memfile, ok := Cached[path]; ok {
+				Serve(c.Response().Writer, c.Request(), memfile)
 				return nil
 			}
 			return next(c)
@@ -165,7 +165,7 @@ func Init(server *echo.Echo, dir string, devmode bool) {
 	})
 }
 
-func cacheFile(location string, servePath string) error {
+func CacheFile(location string, servePath string) error {
 
 	apath, err := filepath.Abs(location)
 	if err != nil {
@@ -178,7 +178,7 @@ func cacheFile(location string, servePath string) error {
 		return err
 	}
 
-	memfile, exists := MemCached[servePath]
+	memfile, exists := Cached[servePath]
 	if exists {
 		oldlen := len(memfile.DefaultContent)
 		newlen := len(data)
@@ -218,7 +218,7 @@ func cacheFile(location string, servePath string) error {
 	}
 
 	memfile.ETag = RandStr(6)
-	MemCached[servePath] = memfile
+	Cached[servePath] = memfile
 
 	return nil
 }
@@ -234,21 +234,21 @@ func servablePath(loc string) string {
 	return loc
 }
 
-func CtxServeMemfile(filename string) func(c ctx) error {
+func ServeMemFile(filename string) func(c ctx) error {
 	loc := filename
 	if loc[:1] != slash {
 		loc = slash + loc
 	}
 	return func(c ctx) error {
-		if memfile, ok := MemCached[loc]; ok {
-			ServeMemfile(c.Response().Writer, c.Request(), memfile)
+		if memfile, ok := Cached[loc]; ok {
+			Serve(c.Response().Writer, c.Request(), memfile)
 			return nil
 		}
 		return echo.ErrNotFound
 	}
 }
 
-func ServeMemfile(res http.ResponseWriter, req *http.Request, memfile MemFile) {
+func Serve(res http.ResponseWriter, req *http.Request, memfile MemFile) {
 	res.Header().Set("Etag", memfile.ETag)
 	//c.Response().Header().Set("Cache-Control", "public, max-age=3600, must-revalidate")
 	if DevMode {
@@ -283,7 +283,7 @@ func ServeMemfile(res http.ResponseWriter, req *http.Request, memfile MemFile) {
 	}
 }
 
-func ServeMemfileEcho(c ctx, memfile MemFile) error {
+func ServeEcho(c ctx, memfile MemFile) error {
 	headers := c.Response().Header()
 	headers.Set("Etag", memfile.ETag)
 	headers.Set("Cache-Control", "private, max-age=30, must-revalidate")

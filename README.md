@@ -51,4 +51,39 @@ http://localhost:1323/blog -> ./assets/blog/index.html
   }
 ```
 
+### Caching files from any path
+
+```go
+  location := "../secret_files/pwd.txt"
+  route := "/secrets/pwd"
+  err := memfile.CacheFile(location, route)
+  if err != nil {
+    // ...
+  }
+
+  // GET http://localhost:1323/secrets/pwd -> pwd.txt
+```
+
+### Serving Files Manually
+
+```go
+  server.GET("/resource/", func(c echo.Context) error {
+
+    if file, ok := memfile.Cached["/resource.json"]; ok {
+      memfile.ServeEcho(c, file)
+    }
+
+    return c.JSON(404, map[string]string{
+      "err": "out of luck no resource here",
+    })
+  })
+
+  // or shorthand
+  server.GET("/resource/", memfile.ServeMemFile("/resource.json"))
+  // NOTE: the resource's string corresponds to files under the static dir
+  // "./assets/resource.json" -> "/resource.json"
+
+```
+
+
 ##### public domain, do whatever man

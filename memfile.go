@@ -47,7 +47,8 @@ func check(err error) error {
 	return err
 }
 
-func compressBytes(data []byte) ([]byte, error) {
+// CompressBytes convert []byte to gziped []byte
+func CompressBytes(data []byte) ([]byte, error) {
 	var buff bytes.Buffer
 	gz, err := gzip.NewWriterLevel(&buff, 9)
 	if err != nil {
@@ -210,7 +211,7 @@ func CacheFile(location string, servePath string) error {
 	memfile.DefaultContent = data
 	memfile.Gzipped = shouldCompress
 	if shouldCompress {
-		gzipedData, err := compressBytes(data)
+		gzipedData, err := CompressBytes(data)
 		if err != nil {
 			return err
 		}

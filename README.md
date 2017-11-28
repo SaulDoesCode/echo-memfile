@@ -3,25 +3,32 @@
 ### example
 
 ```go
-  import (
-    "time"
+package main
 
-    "github.com/SaulDoesCode/echo-memfile"
-    "github.com/labstack/echo"
-  )
+import (
+	"time"
 
+	"github.com/SaulDoesCode/echo-memfile"
+	"github.com/labstack/echo"
+)
 
-  func main() {
-    server := echo.New() // your echo instance
+func main() {
+	server := echo.New() // your echo instance
 
-    assetsDir := "./assets" // directory containing your static assets
-    devmode := true // devmode will mostly log what's happening
+	assetsDir := "./assets" // directory containing your static assets
+	devmode := true         // devmode will mostly log what's happening
 
-    // read directory and apply middleware
-    memfile.Init(server, assetsDir, devmode)
+	// MemFileInstance: read files and apply the middleware
+	mfi := memfile.New(server, assetsDir, devmode)
 
-    server.Start(":1323")
-  }
+	// Keep your files updated when you're developing
+	if devmode {
+		mfi.UpdateOnInterval(time.Second * 1)
+	}
+
+	server.Start(":1323")
+}
+
 ```
 
 ### echo-memfile will serve index.html files in directories
@@ -29,23 +36,29 @@
 http://localhost:1323/ -> ./assets/index.html   
 http://localhost:1323/blog -> ./assets/blog/index.html   
 
+________
+##### note
+``mfi = MemFileInstance``
+from    
+``mfi := memfile.New(server *echo.Echo, assetsDir string, devmode bool)``
+_______
 
-### updating files
+### Updating files
 
 ```go
   // if you want to keep your files updated you can
   // 1 - Update them manually as needed
 
   // this reads the directory and updates files and etags as needed
-  memfile.Update()
+  mfi.Update()
 
   // 2 - Update them regularly on an interval
 
   // this runs memfile.Update every 5 seconds
-  memfile.UpdateOnInterval(time.Second * 5)
+  mfi.UpdateOnInterval(time.Second * 5)
 
   // to stop the interval updater
-  ticker := memfile.UpdateOnInterval(time.Second * 5)
+  ticker := mfi.UpdateOnInterval(time.Second * 5)
   if NeedsToStop {
     ticker.Stop()
   }
@@ -56,7 +69,7 @@ http://localhost:1323/blog -> ./assets/blog/index.html
 ```go
   location := "../secret_files/pwd.txt"
   route := "/secrets/pwd"
-  err := memfile.CacheFile(location, route)
+  err := mfi.CacheFile(location, route)
   if err != nil {
     // ...
   }
@@ -69,8 +82,8 @@ http://localhost:1323/blog -> ./assets/blog/index.html
 ```go
   server.GET("/resource/", func(c echo.Context) error {
 
-    if file, ok := memfile.Cached["/resource.json"]; ok {
-      return memfile.ServeEcho(c, file)
+    if file, ok := mfi.Cached["/resource.json"]; ok {
+      return mfi.ServeMF(c, file)
     }
 
     return c.JSON(404, map[string]string{
@@ -78,12 +91,42 @@ http://localhost:1323/blog -> ./assets/blog/index.html
     })
   })
 
-  // or shorthand
-  server.GET("/resource/", memfile.ServeMemFile("/resource.json"))
-  // NOTE: the resource's string corresponds to files under the static dir
-  // "./assets/resource.json" -> "/resource.json"
+  // or
+  server.GET("/resource/", func(c echo.Context) error {
+    return mfi.ServeFile(c, "/resource.json")
+  })
 
+  // or shorthand
+  mfi.ServeMemFile("/resource", "/resource.json")
+
+  // NOTE: the resource's string corresponds to files under the assets dir
+  // "./assets/resource.json" -> "/resource.json"
 ```
 
+### API
 
-##### public domain, do whatever man
+##### memfile
+* ``.New(server *echo.Echo, dir string, devmode bool) MemFileInstance``
+* ``.CompressBytes(data []byte) ([]byte, error)`` gzip a byte slice
+* ``.ServeMemFile(res http.ResponseWriter, req *http.Request, memFile MemFile, CacheControl string) error``
+* ``.ServablePath(dir string, loc string) string`` cleans a filepath (under dir) for use as a url
+* ``.RandBytes(size int) []byte``
+* ``.RandStr(size int) string``
+* ``.MemFileInstance{}``
+* ``.MemFile{}``
+
+
+##### MemFileInstance
+* ``.CacheFile(location string, servePath string) error`` read a file and serve it at a particular route
+* ``.Update()`` check files for changes and update accordingly
+* ``.UpdateOnInterval(interval time.Duration) *time.Ticker`` Keep updating regularly on a duration
+* ``.ServeFile(c echo.Context, filename string) error``
+* ``.ServeMF(c echo.Context, memFile MemFile) error``
+* ``.ServeMemFile(route string, filename string) *echo.Route`` shorthand handler
+* ``.Serve(res http.ResponseWriter, req *http.Request, filename string) error`` for other middleware etc.
+* ``.CacheControl`` the Cache-Control header is ``"private, must-revalidate"`` by default, but you can change it
+* ``.DevMode``
+* ``.Cached``:``map[string]MemFile``, this contains all the MemFile's in an Instance
+
+
+#### public domain, do whatever man

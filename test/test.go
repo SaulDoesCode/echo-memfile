@@ -13,10 +13,13 @@ func main() {
 	assetsDir := "./assets" // directory containing your static assets
 	devmode := true         // devmode will mostly log what's happening
 
-	// read directory and apply middleware
-	memfile.Init(server, assetsDir, devmode)
+	// MemFileInstance: read files and apply the middleware
+	mfi := memfile.New(server, assetsDir, devmode)
 
-	memfile.UpdateOnInterval(time.Second * 2)
+	// Keep your files updated when you're developing
+	if devmode {
+		mfi.UpdateOnInterval(time.Second * 1)
+	}
 
 	server.Start(":1323")
 }

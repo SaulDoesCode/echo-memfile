@@ -211,8 +211,7 @@ func (mfi *MemFileInstance) Serve(res http.ResponseWriter, req *http.Request, fi
 		return echo.ErrNotFound
 	}
 
-	ServeMemFile(res, req, memFile, mfi.CacheControl)
-	return nil
+	return ServeMemFile(res, req, memFile, mfi.CacheControl)
 }
 
 func (mfi *MemFileInstance) ServeMF(c ctx, memFile MemFile) error {

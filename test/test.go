@@ -18,7 +18,7 @@ func main() {
 
 	// Keep your files updated when you're developing
 	if devmode {
-		mfi.UpdateOnInterval(time.Second * 1)
+		go mfi.UpdateOnInterval(time.Millisecond * 20)
 	}
 
 	server.Start(":1323")

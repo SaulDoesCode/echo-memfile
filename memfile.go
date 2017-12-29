@@ -5,23 +5,28 @@ import (
 	"compress/gzip"
 	"crypto/rand"
 	"fmt"
-	"github.com/labstack/echo"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/labstack/echo"
 )
 
 type ctx = echo.Context
 
 var (
+	// Compressable - list of compressable file types, append to it if needed
 	Compressable = []string{"", ".txt", ".htm", ".html", ".css", ".toml", ".php", ".js", ".json", ".md", ".mdown", ".xml", ".svg", ".go", ".cgi", ".py", ".pl", ".aspx", ".asp"}
-	Platform     = runtime.GOOS
-	slash        = getCorrectSlash()
-	fslash       = []byte("/")[0]
+	// RandomDictionary - String of Characters used in Etag generation, change in needed
+	RandomDictionary = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	Platform         = runtime.GOOS
+	slash            = getCorrectSlash()
+	fslash           = []byte("/")[0]
 )
 
 // MemFile - in memory file struct
@@ -37,16 +42,16 @@ type MemFile struct {
 type MemFileInstance struct {
 	Dir          string
 	CacheControl string
-	Cached       map[string]MemFile
+	Cached       *sync.Map
 	Server       *echo.Echo
 	DevMode      bool
 }
 
 func New(server *echo.Echo, dir string, devmode bool) MemFileInstance {
 	mfi := MemFileInstance{
-		Server: server,
-		DevMode: devmode,
-		Cached: map[string]MemFile{},
+		Server:       server,
+		DevMode:      devmode,
+		Cached:       &sync.Map{},
 		CacheControl: "private, must-revalidate",
 	}
 
@@ -68,9 +73,11 @@ func New(server *echo.Echo, dir string, devmode bool) MemFileInstance {
 				}
 			}
 
-			if memFile, ok := mfi.Cached[path]; ok {
-				return ServeMemFile(c.Response().Writer, c.Request(), memFile, mfi.CacheControl)
+			result, exists := mfi.Cached.Load(path)
+			if exists {
+				return ServeMemFile(c.Response().Writer, c.Request(), result.(MemFile), mfi.CacheControl)
 			}
+
 			return next(c)
 		}
 	})
@@ -87,16 +94,15 @@ func (mfi *MemFileInstance) Update() {
 			servePath := ServablePath(mfi.Dir, location)
 			filelist = append(filelist, servePath)
 
-			mf, hasFile := mfi.Cached[servePath]
-			if hasFile {
+			if result, hasFile := mfi.Cached.Load(servePath); hasFile {
+				mf := result.(MemFile)
 				if !info.ModTime().Equal(mf.ModTime) {
 					err = check(mfi.CacheFile(location, servePath), false)
 				}
 				return err
-
 			} else {
 				if mfi.DevMode {
-					fmt.Println("New file: ", servePath)
+					fmt.Println("New file Found: ", servePath)
 				}
 				return check(mfi.CacheFile(location, servePath), false)
 			}
@@ -104,14 +110,15 @@ func (mfi *MemFileInstance) Update() {
 		return err
 	})
 
-	for filename, _ := range mfi.Cached {
-		if !stringSliceContains(filelist, filename) {
-			delete(mfi.Cached, filename)
+	mfi.Cached.Range(func(filename interface{}, value interface{}) bool {
+		if !stringSliceContains(filelist, filename.(string)) {
+			mfi.Cached.Delete(filename)
 			if mfi.DevMode {
 				fmt.Println("No longer serving: ", filename)
 			}
 		}
-	}
+		return false
+	})
 }
 
 func (mfi *MemFileInstance) UpdateOnInterval(interval time.Duration) *time.Ticker {
@@ -136,19 +143,17 @@ func (mfi *MemFileInstance) CacheFile(location string, servePath string) error {
 		return err
 	}
 
-	memFile, exists := mfi.Cached[servePath]
+	var memFile MemFile
+
+	result, exists := mfi.Cached.Load(servePath)
 	if exists {
+		memFile = result.(MemFile)
 		if len(data) == len(memFile.DefaultContent) {
 			return nil
 		}
 		if mfi.DevMode {
 			fmt.Println("File Changed: ", servePath)
 		}
-	}
-
-	fi, err := os.Stat(apath)
-	if err == nil {
-		memFile.ModTime = fi.ModTime()
 	}
 
 	memFile.ContentType = http.DetectContentType(data)
@@ -177,8 +182,13 @@ func (mfi *MemFileInstance) CacheFile(location string, servePath string) error {
 		memFile.Content = gzipedData
 	}
 
+	fi, err := os.Stat(apath)
+	if err == nil {
+		memFile.ModTime = fi.ModTime()
+	}
+
 	memFile.ETag = RandStr(6)
-	mfi.Cached[servePath] = memFile
+	mfi.Cached.Store(servePath, memFile)
 
 	return nil
 }
@@ -204,18 +214,15 @@ func (mfi *MemFileInstance) ServeMemFile(route string, filename string) *echo.Ro
 	})
 }
 
-func (mfi *MemFileInstance) Serve(res http.ResponseWriter, req *http.Request, filename string) error {
-
-	memFile, exists := mfi.Cached[filename]
-	if !exists {
-		return echo.ErrNotFound
+func (mfi *MemFileInstance) Serve(res http.ResponseWriter, req *http.Request, servePath string) error {
+	result, exists := mfi.Cached.Load(servePath)
+	if exists {
+		return ServeMemFile(res, req, result.(MemFile), mfi.CacheControl)
 	}
-
-	return ServeMemFile(res, req, memFile, mfi.CacheControl)
+	return echo.ErrNotFound
 }
 
 func (mfi *MemFileInstance) ServeMF(c ctx, memFile MemFile) error {
-
 	headers := c.Response().Header()
 	headers.Set("Etag", memFile.ETag)
 	headers.Set("Cache-Control", mfi.CacheControl)
@@ -242,11 +249,11 @@ func (mfi *MemFileInstance) ServeMF(c ctx, memFile MemFile) error {
 }
 
 func (mfi *MemFileInstance) ServeFile(c ctx, filename string) error {
-	memFile, exists := mfi.Cached[filename]
+	result, exists := mfi.Cached.Load(filename)
 	if !exists {
 		return echo.ErrNotFound
 	}
-	return mfi.ServeMF(c, memFile)
+	return mfi.ServeMF(c, result.(MemFile))
 }
 
 func ServeMemFile(res http.ResponseWriter, req *http.Request, memFile MemFile, CacheControl string) error {
@@ -327,12 +334,10 @@ func CompressBytes(data []byte) ([]byte, error) {
 }
 
 func RandBytes(size int) []byte {
-
-	dictionary := "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 	bits := make([]byte, size)
 	rand.Read(bits)
 	for k, v := range bits {
-		bits[k] = dictionary[v%byte(len(dictionary))]
+		bits[k] = RandomDictionary[v%byte(len(RandomDictionary))]
 	}
 	return bits
 }

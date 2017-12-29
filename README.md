@@ -82,8 +82,8 @@ _______
 ```go
   server.GET("/resource/", func(c echo.Context) error {
 
-    if file, ok := mfi.Cached["/resource.json"]; ok {
-      return mfi.ServeMF(c, file)
+    if result, ok := mfi.Cached.Load("/resource.json"); ok {
+      return mfi.ServeMF(c, result.(memfile.MemFile))
     }
 
     return c.JSON(404, map[string]string{
@@ -126,7 +126,7 @@ _______
 * ``.Serve(res http.ResponseWriter, req *http.Request, filename string) error`` for other middleware etc.
 * ``.CacheControl`` the Cache-Control header is ``"private, must-revalidate"`` by default, but you can change it
 * ``.DevMode``
-* ``.Cached``:``map[string]MemFile``, this contains all the MemFile's in an Instance
+* ``.Cached``:``*sync.Map``, this contains all the MemFile's in an Instance [assumed types (key string, value MemFile)]
 
 
 #### public domain, do whatever man

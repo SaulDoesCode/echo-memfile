@@ -63,6 +63,10 @@ func New(server *echo.Echo, dir string, devmode bool) MemFileInstance {
 
 	mfi.Server.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c ctx) error {
+			err := next(c)
+			if err == nil {
+				return err
+			}
 			path := c.Request().URL.Path
 
 			if filepath.Ext(path) == "" {
@@ -78,7 +82,7 @@ func New(server *echo.Echo, dir string, devmode bool) MemFileInstance {
 				return ServeMemFile(c.Response().Writer, c.Request(), result.(MemFile), mfi.CacheControl)
 			}
 
-			return next(c)
+			return err
 		}
 	})
 

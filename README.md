@@ -83,7 +83,7 @@ _______
   server.GET("/resource/", func(c echo.Context) error {
 
     if result, ok := mfi.Cached.Load("/resource.json"); ok {
-      return mfi.ServeMF(c, result.(memfile.MemFile))
+      return mfi.ServeMF(c, result.(*memfile.MemFile))
     }
 
     return c.JSON(404, map[string]string{
@@ -121,7 +121,7 @@ _______
 * ``.Update()`` check files for changes and update accordingly
 * ``.UpdateOnInterval(interval time.Duration) *time.Ticker`` Keep updating regularly on a duration
 * ``.ServeFile(c echo.Context, filename string) error``
-* ``.ServeMF(c echo.Context, memFile MemFile) error``
+* ``.ServeMF(c echo.Context, memFile *MemFile) error``
 * ``.ServeMemFile(route string, filename string) *echo.Route`` shorthand handler
 * ``.Serve(res http.ResponseWriter, req *http.Request, filename string) error`` for other middleware etc.
 * ``.CacheControl`` the Cache-Control header is ``"private, must-revalidate"`` by default, but you can change it

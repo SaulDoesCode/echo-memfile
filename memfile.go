@@ -36,6 +36,7 @@ type MemFile struct {
 	DefaultContent []byte
 	Content        []byte
 	ModTime        time.Time
+	mutex          sync.RWMutex
 	Gzipped        bool
 }
 
@@ -79,7 +80,7 @@ func New(server *echo.Echo, dir string, devmode bool) MemFileInstance {
 
 			result, exists := mfi.Cached.Load(path)
 			if exists {
-				return ServeMemFile(c.Response().Writer, c.Request(), result.(MemFile), mfi.CacheControl)
+				return ServeMemFile(c.Response().Writer, c.Request(), result.(*MemFile), mfi.CacheControl)
 			}
 
 			return err
@@ -99,7 +100,7 @@ func (mfi *MemFileInstance) Update() {
 			filelist = append(filelist, servePath)
 
 			if result, hasFile := mfi.Cached.Load(servePath); hasFile {
-				mf := result.(MemFile)
+				mf := result.(*MemFile)
 				if !info.ModTime().Equal(mf.ModTime) {
 					err = check(mfi.CacheFile(location, servePath), false)
 				}
@@ -147,18 +148,25 @@ func (mfi *MemFileInstance) CacheFile(location string, servePath string) error {
 		return err
 	}
 
-	var memFile MemFile
+	var memFile *MemFile
 
 	result, exists := mfi.Cached.Load(servePath)
 	if exists {
-		memFile = result.(MemFile)
-		if len(data) == len(memFile.DefaultContent) {
+		memFile = result.(*MemFile)
+		if bytes.Equal(data, memFile.DefaultContent) {
 			return nil
 		}
 		if mfi.DevMode {
 			fmt.Println("File Changed: ", servePath)
 		}
+	} else {
+		memFile = &MemFile{}
+		mfi.Cached.Store(servePath, memFile)
 	}
+
+	// mutating things causes trouble when loads of ther stuff is accessing
+	// the MemFile so I'm locking it down while a file is being updated
+	memFile.mutex.Lock()
 
 	memFile.ContentType = http.DetectContentType(data)
 
@@ -192,8 +200,8 @@ func (mfi *MemFileInstance) CacheFile(location string, servePath string) error {
 	}
 
 	memFile.ETag = RandStr(6)
-	mfi.Cached.Store(servePath, memFile)
 
+	memFile.mutex.Unlock()
 	return nil
 }
 
@@ -221,12 +229,12 @@ func (mfi *MemFileInstance) ServeMemFile(route string, filename string) *echo.Ro
 func (mfi *MemFileInstance) Serve(res http.ResponseWriter, req *http.Request, servePath string) error {
 	result, exists := mfi.Cached.Load(servePath)
 	if exists {
-		return ServeMemFile(res, req, result.(MemFile), mfi.CacheControl)
+		return ServeMemFile(res, req, result.(*MemFile), mfi.CacheControl)
 	}
 	return echo.ErrNotFound
 }
 
-func (mfi *MemFileInstance) ServeMF(c ctx, memFile MemFile) error {
+func (mfi *MemFileInstance) ServeMF(c ctx, memFile *MemFile) error {
 	headers := c.Response().Header()
 	headers.Set("Etag", memFile.ETag)
 	headers.Set("Cache-Control", mfi.CacheControl)
@@ -257,10 +265,10 @@ func (mfi *MemFileInstance) ServeFile(c ctx, filename string) error {
 	if !exists {
 		return echo.ErrNotFound
 	}
-	return mfi.ServeMF(c, result.(MemFile))
+	return mfi.ServeMF(c, result.(*MemFile))
 }
 
-func ServeMemFile(res http.ResponseWriter, req *http.Request, memFile MemFile, CacheControl string) error {
+func ServeMemFile(res http.ResponseWriter, req *http.Request, memFile *MemFile, CacheControl string) error {
 	res.Header().Set("Etag", memFile.ETag)
 	res.Header().Set("Cache-Control", CacheControl)
 	res.Header().Set("Content-Type", memFile.ContentType)

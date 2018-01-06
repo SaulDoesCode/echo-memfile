@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -33,10 +34,12 @@ var (
 type MemFile struct {
 	ContentType    string
 	ETag           string
+	PushAssets     []string
 	DefaultContent []byte
 	Content        []byte
 	ModTime        time.Time
 	mutex          sync.RWMutex
+	PushOptions    *http.PushOptions
 	Gzipped        bool
 }
 
@@ -80,7 +83,26 @@ func New(server *echo.Echo, dir string, devmode bool) MemFileInstance {
 
 			result, exists := mfi.Cached.Load(path)
 			if exists {
-				return ServeMemFile(c.Response().Writer, c.Request(), result.(*MemFile), mfi.CacheControl)
+				respWriter := c.Response().Writer
+				mf := result.(*MemFile)
+
+				if len(mf.PushAssets) > 0 {
+					if pusher, ok := respWriter.(http.Pusher); ok {
+						pushOptions := &http.PushOptions{
+							Header: http.Header{
+								"Accept-Encoding": c.Request().Header["Accept-Encoding"],
+							},
+						}
+						for _, pushAsset := range mf.PushAssets {
+							err := pusher.Push(pushAsset, pushOptions)
+							if mfi.DevMode && err != nil {
+								fmt.Println("http2-push fail on:", pushAsset, err)
+							}
+						}
+					}
+				}
+
+				return ServeMemFile(respWriter, c.Request(), mf, mfi.CacheControl)
 			}
 
 			return err
@@ -94,7 +116,7 @@ func (mfi *MemFileInstance) Update() {
 	filelist := []string{}
 
 	filepath.Walk(mfi.Dir, func(location string, info os.FileInfo, err error) error {
-		if err == nil && !info.IsDir() {
+		if err == nil && !info.IsDir() && filepath.Ext(location) != ".push" {
 
 			servePath := ServablePath(mfi.Dir, location)
 			filelist = append(filelist, servePath)
@@ -199,6 +221,13 @@ func (mfi *MemFileInstance) CacheFile(location string, servePath string) error {
 		memFile.ModTime = fi.ModTime()
 	}
 
+	pushAssetsFile, err := ioutil.ReadFile(apath + ".push")
+	if err == nil {
+		var PushAssets []string
+		json.Unmarshal(pushAssetsFile, &PushAssets)
+		memFile.PushAssets = PushAssets
+	}
+
 	memFile.ETag = RandStr(6)
 
 	memFile.mutex.Unlock()
@@ -232,6 +261,17 @@ func (mfi *MemFileInstance) Serve(res http.ResponseWriter, req *http.Request, se
 		return ServeMemFile(res, req, result.(*MemFile), mfi.CacheControl)
 	}
 	return echo.ErrNotFound
+}
+
+func (mfi *MemFileInstance) SetPushAssets(servePath string, PushAssets []string) bool {
+	result, exists := mfi.Cached.Load(servePath)
+	if exists {
+		mf := result.(*MemFile)
+		mf.mutex.Lock()
+		mf.PushAssets = PushAssets
+		mf.mutex.Unlock()
+	}
+	return exists
 }
 
 func (mfi *MemFileInstance) ServeMF(c ctx, memFile *MemFile) error {

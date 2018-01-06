@@ -18,8 +18,8 @@ func main() {
 
 	// Keep your files updated when you're developing
 	if devmode {
-		go mfi.UpdateOnInterval(time.Millisecond * 20)
+		mfi.UpdateOnInterval(time.Millisecond * 20)
 	}
 
-	server.Start(":1323")
+	server.StartTLS(":1323", "./cert.pem", "./key.pem")
 }

@@ -103,6 +103,41 @@ _______
   // "./assets/resource.json" -> "/resource.json"
 ```
 
+### HTTP2 Push with (myfile.html).push
+
+```
+	./assets
+	>		index.html
+	> 	styles.css
+	> 	picture.jpg
+	> 	index.html.push
+```
+
+``index.html.push`` is essentially just a json array containing serve routes to push with your html file
+```json
+["/styles.css",  "/picture.jpg"]
+```
+
+### HTTP2 Push By MemFileInstance.SetPushAssets
+Use this method for best results because manually modifying MemFiles can lead to corruption (in memory, your files are safe)
+SetPushAssets uses a mutex lock and unlock internally to avoid concurrent read-write related issues.
+
+```go
+	mfi.SetPushAssets("/route.html", []string{"/route.css", "/route.js"})
+```
+
+### HTTP2 Push By Modifying MemFile.PushAssets ([]string)
+
+```go
+result, exists := mfi.Cached.Load("/subdir/index.html")
+if exists {
+	result.(*memfile.MemFile).PushAssets = []string{"/js/rilti.min.js", "/css/bulma.min.css"}
+}
+// note if you're doing it this way do it before the server starts
+// because of potential MemFile corruption from concurrent read-write issues
+// MFI.SetPushAssets uses mutex locks internally to avoid this
+```
+
 ### API
 
 ##### memfile

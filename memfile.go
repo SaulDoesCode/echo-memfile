@@ -245,12 +245,13 @@ func ServablePath(dir string, loc string) string {
 	return loc
 }
 
-func (mfi *MemFileInstance) ServeMemFile(route string, filename string) *echo.Route {
+func (mfi *MemFileInstance) ServeMemFile(route string, filename string) {
 	loc := filename
 	if loc[:1] != slash {
 		loc = slash + loc
 	}
-	return mfi.Server.GET(route, func(c ctx) error {
+
+	mfi.Server.GET(route, func(c ctx) error {
 		return mfi.Serve(c.Response().Writer, c.Request(), loc)
 	})
 }

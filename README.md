@@ -157,7 +157,7 @@ if exists {
 * ``.UpdateOnInterval(interval time.Duration) *time.Ticker`` Keep updating regularly on a duration
 * ``.ServeFile(c echo.Context, filename string) error``
 * ``.ServeMF(c echo.Context, memFile *MemFile) error``
-* ``.ServeMemFile(route string, filename string) *echo.Route`` shorthand handler
+* ``.ServeMemFile(route string, filename string)`` shorthand handler
 * ``.Serve(res http.ResponseWriter, req *http.Request, filename string) error`` for other middleware etc.
 * ``.CacheControl`` the Cache-Control header is ``"private, must-revalidate"`` by default, but you can change it
 * ``.DevMode``

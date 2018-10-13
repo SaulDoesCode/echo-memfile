@@ -25,7 +25,7 @@ var (
 	Compressable = []string{"", ".txt", ".htm", ".html", ".css", ".toml", ".php", ".js", ".json", ".md", ".mdown", ".xml", ".svg", ".go", ".cgi", ".py", ".pl", ".aspx", ".asp"}
 	// RandomDictionary - String of Characters used in Etag generation, change in needed
 	RandomDictionary = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-	Platform         = runtime.GOOS
+	platform         = runtime.GOOS
 	slash            = getCorrectSlash()
 	fslash           = []byte("/")[0]
 )
@@ -129,7 +129,7 @@ func (mfi *MemFileInstance) Update() {
 				return err
 			} else {
 				if mfi.DevMode {
-					fmt.Println("New file Found: ", servePath)
+					fmt.Println("New file Found: ", servePath, " from ", location)
 				}
 				return check(mfi.CacheFile(location, servePath), false)
 			}
@@ -186,7 +186,7 @@ func (mfi *MemFileInstance) CacheFile(location string, servePath string) error {
 		mfi.Cached.Store(servePath, memFile)
 	}
 
-	// mutating things causes trouble when loads of ther stuff is accessing
+	// mutating things causes trouble when loads of stuff is accessing
 	// the MemFile so I'm locking it down while a file is being updated
 	memFile.mutex.Lock()
 
@@ -239,7 +239,7 @@ func ServablePath(dir string, loc string) string {
 	if loc[:1] != slash {
 		loc = slash + loc
 	}
-	if Platform == "windows" {
+	if platform == "windows" {
 		loc = strings.Replace(loc, "\\", "/", -1)
 	}
 	return loc
@@ -342,7 +342,7 @@ func ServeMemFile(res http.ResponseWriter, req *http.Request, memFile *MemFile, 
 }
 
 func getCorrectSlash() string {
-	if Platform == "windows" {
+	if platform == "windows" {
 		return "\\"
 	}
 	return "/"
